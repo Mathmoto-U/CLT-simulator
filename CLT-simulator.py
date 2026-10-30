@@ -1,34 +1,33 @@
 """
-標本サイズ n に対する標本平均の確率分布（U字型母集団）シミュレーター (Streamlit版)
+標本サイズ n に対する標本平均の確率分布シミュレーター（3モード切替版）
 ========================================================================================
 実行方法:
     pip install streamlit numpy plotly
-    streamlit run u_dist_theory_app.py
+    streamlit run clt_theory_3modes_app.py
 """
 
 import math
 import time
-from typing import Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
 # ============================================================================
-# 1. ページ設定 & カスタムCSS（横画面2カラム固定・見切れ防止）
+# 1. ページ設定 & カスタムCSS（横画面2カラム固定・見切れ防止・サイドバー対応）
 # ============================================================================
 st.set_page_config(
     page_title="中心極限定理シミュレーター（標本平均の確率分布）",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 CUSTOM_CSS = """
 <style>
-    /* 1. Streamlitの上部ヘッダーバーを透明化＆高さを最小化 */
+    /* 1. Streamlitの上部ヘッダーバーを透明化 */
     header[data-testid="stHeader"] {
         background: transparent !important;
-        height: 1.5rem !important;
     }
 
     /* 2. ページ全体のスクロールを許可 */
@@ -43,19 +42,14 @@ CUSTOM_CSS = """
         max-width: 1400px !important;
     }
 
-    /* サイドバー開閉ボタンを非表示 */
-    [data-testid="collapsedControl"] {
-        display: none !important;
-    }
-
-    /* PC横画面レイアウト：左右2カラムを折り返さず横並びで固定 */
-    [data-testid="stHorizontalBlock"] {
+    /* PC横画面レイアウト：メイン領域の左右2カラムを折り返さず横並びで固定 */
+    .main [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         align-items: stretch !important;
     }
-    [data-testid="column"] {
+    .main [data-testid="column"] {
         min-width: 0 !important;
     }
 
@@ -120,19 +114,56 @@ CUSTOM_CSS = """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 # ============================================================================
-# 2. 定数・母集団の確率分布（1〜5のU字型分布）・セッション状態の初期化
+# 2. 3つの分布モード定義 & セッション状態の初期化
 # ============================================================================
-VALUES = np.array([1, 2, 3, 4, 5], dtype=int)
+MODE_BERNOULLI = "ベルヌーイ分布B(1,0.6)"
+MODE_UNIFORM = "一様分布（さいころ）"
+MODE_U_SHAPE = "U字型（1,2,3,4,5）"
 
-# 1 - (反復試行の確率) 型のU字分布: 両外側(1, 5)が31%、内側(2, 4)が16%、中央(3)が6%
-PROBS = np.array([0.31, 0.16, 0.06, 0.16, 0.31], dtype=float)
-# ※純粋な (1 - C(4,k)/16) / 4 を使う場合は以下の行のコメントを外してください:
-# PROBS = np.array([15/64, 12/64, 10/64, 12/64, 15/64], dtype=float)
-
-# 母平均 μ と 母分散 σ^2
-POP_MEAN = float(np.sum(VALUES * PROBS))                          # 3.00
-POP_VAR = float(np.sum(((VALUES - POP_MEAN) ** 2) * PROBS))       # 2.80
-POP_STD = math.sqrt(POP_VAR)                                      # ≒ 1.6733
+DIST_MODES: Dict[str, Dict] = {
+    MODE_BERNOULLI: {
+        "title": "ベルヌーイ分布 B(1, 0.6)",
+        "subtitle": "0（確率0.4）と 1（確率0.6）をとる母集団から n 個抽出したときの標本平均の確率分布です。",
+        "pop_title": "母集団の確率分布 B(1, 0.6)",
+        "values": np.array([0, 1], dtype=int),
+        "probs": np.array([0.40, 0.60], dtype=float),
+        "bar_colors": ["#94a3b8", "#10b981"],
+        "border_colors": ["#64748b", "#059669"],
+        "pop_y_max": 0.80,
+        "pop_y_dtick": 0.20,
+        "fixed_x_range": [-0.25, 1.25],
+        "fixed_x_dtick": 0.2,
+        "fixed_label": "横軸 0〜1 固定",
+    },
+    MODE_UNIFORM: {
+        "title": "一様分布（さいころ）",
+        "subtitle": "1〜6の目が等確率（1/6ずつ）で出る母集団から n 個抽出したときの標本平均の確率分布です。",
+        "pop_title": "母集団の確率分布（一様分布）",
+        "values": np.array([1, 2, 3, 4, 5, 6], dtype=int),
+        "probs": np.array([1.0 / 6.0] * 6, dtype=float),
+        "bar_colors": ["#60a5fa"] * 6,
+        "border_colors": ["#2563eb"] * 6,
+        "pop_y_max": 0.30,
+        "pop_y_dtick": 0.05,
+        "fixed_x_range": [0.5, 6.5],
+        "fixed_x_dtick": 0.5,
+        "fixed_label": "横軸 1〜6 固定",
+    },
+    MODE_U_SHAPE: {
+        "title": "U字型分布（1, 2, 3, 4, 5）",
+        "subtitle": "両外側（1と5）の確率が大きく中央（3）が小さいU字型母集団から n 個抽出したときの標本平均の確率分布です。",
+        "pop_title": "母集団の確率分布（U字型分布）",
+        "values": np.array([1, 2, 3, 4, 5], dtype=int),
+        "probs": np.array([0.31, 0.16, 0.06, 0.16, 0.31], dtype=float),
+        "bar_colors": ["#6366f1", "#94a3b8", "#cbd5e1", "#94a3b8", "#10b981"],
+        "border_colors": ["#4338ca", "#64748b", "#94a3b8", "#64748b", "#059669"],
+        "pop_y_max": 0.40,
+        "pop_y_dtick": 0.10,
+        "fixed_x_range": [0.5, 5.5],
+        "fixed_x_dtick": 0.5,
+        "fixed_label": "横軸 1〜5 固定",
+    },
+}
 
 # 連続実行の更新間隔（秒）
 SLEEP_INTERVAL = 0.12
@@ -140,30 +171,74 @@ SLEEP_INTERVAL = 0.12
 
 def init_session_state() -> None:
     """セッション状態を初期化する"""
+    if "dist_mode" not in st.session_state:
+        st.session_state.dist_mode = MODE_BERNOULLI
     if "n" not in st.session_state:
-        st.session_state.n = 1  # 初期標本サイズ n = 1
+        st.session_state.n = 1
     if "is_running" not in st.session_state:
         st.session_state.is_running = False
     if "show_normal_curve" not in st.session_state:
         st.session_state.show_normal_curve = True
     if "x_axis_mode" not in st.session_state:
-        st.session_state.x_axis_mode = "fixed"  # "fixed" (1〜5固定) or "zoom" (±4σ拡大)
+        st.session_state.x_axis_mode = "fixed"
 
 
 init_session_state()
 
 
+def get_population_stats(mode_key: str) -> Tuple[float, float, float]:
+    """選択中の母集団の母平均 μ, 母分散 σ^2, 母標準偏差 σ を返す"""
+    cfg = DIST_MODES[mode_key]
+    vals = cfg["values"]
+    probs = cfg["probs"]
+    mean = float(np.sum(vals * probs))
+    var = float(np.sum(((vals - mean) ** 2) * probs))
+    std = math.sqrt(var)
+    return mean, var, std
+
+
 # ============================================================================
-# 3. 標本平均の確率分布（厳密な畳み込み）計算ロジック
+# 3. サイドバー（3モード切替）
+# ============================================================================
+with st.sidebar:
+    st.markdown("### 📊 母集団分布の選択")
+    selected_mode = st.radio(
+        "モードを選択",
+        options=[MODE_BERNOULLI, MODE_UNIFORM, MODE_U_SHAPE],
+        index=[MODE_BERNOULLI, MODE_UNIFORM, MODE_U_SHAPE].index(st.session_state.dist_mode),
+        label_visibility="collapsed",
+    )
+
+    if selected_mode != st.session_state.dist_mode:
+        st.session_state.dist_mode = selected_mode
+        st.session_state.is_running = False
+        st.session_state.n = 1
+        st.rerun()
+
+    pop_mean, pop_var, pop_std = get_population_stats(st.session_state.dist_mode)
+    st.divider()
+    st.markdown(
+        f"**母平均 $\\mu$** : `{pop_mean:.2f}`  \n"
+        f"**母分散 $\\sigma^2$** : `{pop_var:.3f}`  \n"
+        f"**母標準偏差 $\\sigma$** : `{pop_std:.3f}`"
+    )
+
+
+# ============================================================================
+# 4. 標本平均の確率分布（厳密な畳み込み）計算ロジック
 # ============================================================================
 @st.cache_data
-def compute_sample_mean_distribution(n: int) -> Tuple[np.ndarray, np.ndarray]:
+def compute_sample_mean_distribution(mode_key: str, n: int) -> Tuple[np.ndarray, np.ndarray]:
     """
     繰り返し二乗法による畳み込み（Convolution）を用いて、
     標本サイズ n における標本平均 X_bar の厳密な確率分布を高速に計算する。
     """
+    cfg = DIST_MODES[mode_key]
+    vals = cfg["values"]
+    probs = cfg["probs"]
+
     result = np.array([1.0], dtype=float)
-    base = PROBS.copy()
+    base = probs.copy()
     exp = n
 
     while exp > 0:
@@ -175,14 +250,15 @@ def compute_sample_mean_distribution(n: int) -> Tuple[np.ndarray, np.ndarray]:
     # 浮動小数点誤差を補正して確率の総和を1に正規化
     result = result / np.sum(result)
 
-    # n個の和 S_n は n 〜 5n の整数値をとるため、標本平均は (n 〜 5n) / n
-    sums = np.arange(n, 5 * n + 1, dtype=float)
+    # n個の和 S_n は n*v_min 〜 n*v_max の整数値をとるため、標本平均は S_n / n
+    v_min, v_max = int(vals[0]), int(vals[-1])
+    sums = np.arange(n * v_min, n * v_max + 1, dtype=float)
     x_bars = sums / n
     return x_bars, result
 
 
 # ============================================================================
-# 4. HTML & チャート描画ヘルパー
+# 5. HTML & チャート描画ヘルパー
 # ============================================================================
 def render_n_banner_html(n: int) -> str:
     """左カラム上部の「標本サイズ n」バナーHTML（中央揃え）"""
@@ -194,26 +270,30 @@ def render_n_banner_html(n: int) -> str:
     """
 
 
-def create_population_figure() -> go.Figure:
-    """
-    左カラム：母集団（1, 2, 3, 4, 5のU字型分布）の確率分布グラフ
-    """
-    bar_colors = ["#6366f1", "#94a3b8", "#cbd5e1", "#94a3b8", "#10b981"]
-    border_colors = ["#4338ca", "#64748b", "#94a3b8", "#64748b", "#059669"]
-    text_vals = [f"{p:.2f}" for p in PROBS]
+def create_population_figure(mode_key: str) -> go.Figure:
+    """左カラム：選択中の母集団の確率分布グラフ"""
+    cfg = DIST_MODES[mode_key]
+    vals = cfg["values"]
+    probs = cfg["probs"]
+
+    text_vals = [f"{p:.3f}" if mode_key == MODE_UNIFORM else f"{p:.2f}" for p in probs]
+    bar_w = 0.38 if len(vals) == 2 else 0.55
 
     fig = go.Figure()
 
     fig.add_trace(
         go.Bar(
-            x=VALUES,
-            y=PROBS,
-            width=0.55,
-            marker=dict(color=bar_colors, line=dict(color=border_colors, width=1.4)),
+            x=vals,
+            y=probs,
+            width=bar_w,
+            marker=dict(
+                color=cfg["bar_colors"],
+                line=dict(color=cfg["border_colors"], width=1.4),
+            ),
             text=text_vals,
             textposition="outside",
             textfont=dict(size=12, color="#334155"),
-            hovertemplate="値 %{x}<br>確率: <b>%{y:.2f}</b><extra></extra>",
+            hovertemplate="値 %{x}<br>確率: <b>%{y:.4f}</b><extra></extra>",
         )
     )
 
@@ -224,17 +304,18 @@ def create_population_figure() -> go.Figure:
         paper_bgcolor="#ffffff",
         showlegend=False,
         xaxis=dict(
+            range=cfg["fixed_x_range"],
             tickmode="array",
-            tickvals=[1, 2, 3, 4, 5],
-            ticktext=["1", "2", "3", "4", "5"],
+            tickvals=list(vals),
+            ticktext=[str(v) for v in vals],
             fixedrange=True,
             gridcolor="#f8fafc",
             linecolor="#cbd5e1",
             tickfont=dict(size=12, color="#334155"),
         ),
         yaxis=dict(
-            range=[0, 0.40],
-            dtick=0.10,
+            range=[0, cfg["pop_y_max"]],
+            dtick=cfg["pop_y_dtick"],
             tickformat=".2f",
             fixedrange=True,
             gridcolor="#f1f5f9",
@@ -246,14 +327,17 @@ def create_population_figure() -> go.Figure:
     return fig
 
 
-def create_sample_mean_dist_figure(n: int) -> go.Figure:
-    """
-    右カラム：標本サイズ n に対する標本平均 X_bar の確率分布グラフ
-    """
-    x_bars, probs = compute_sample_mean_distribution(n)
+def create_sample_mean_dist_figure(mode_key: str, n: int) -> go.Figure:
+    """右カラム：標本サイズ n に対する標本平均 X_bar の確率分布グラフ"""
+    cfg = DIST_MODES[mode_key]
+    vals = cfg["values"]
+    v_min, v_max = float(vals[0]), float(vals[-1])
+    span = v_max - v_min
 
-    mean = POP_MEAN
-    std_xbar = POP_STD / math.sqrt(n)
+    x_bars, probs = compute_sample_mean_distribution(mode_key, n)
+    mean, _, pop_std = get_population_stats(mode_key)
+
+    std_xbar = pop_std / math.sqrt(n)
     step_w = 1.0 / n  # 隣り合う標本平均の間隔 (1/n)
 
     # 正規分布近似によるピーク確率 (刻み幅 1/n × 最大確率密度)
@@ -263,22 +347,25 @@ def create_sample_mean_dist_figure(n: int) -> go.Figure:
     # n が変わっても山が潰れないよう、縦軸の上限を現在のピークに合わせてスケーリング
     y_max = max(max_prob, theo_peak) * 1.18
 
-    # 横軸の表示範囲（1〜5固定 または μ±4σ拡大）
+    # 横軸の表示範囲（全体固定 または μ±4σ拡大）
     if st.session_state.x_axis_mode == "zoom" and n >= 4:
-        half_span = max(4.0 * std_xbar, 0.08)
-        x_min = max(0.8, mean - half_span)
-        x_max = min(5.2, mean + half_span)
+        half_span = max(4.0 * std_xbar, 0.02 * span)
+        x_min = max(v_min - 0.15 * span, mean - half_span)
+        x_max = min(v_max + 0.15 * span, mean + half_span)
         x_dtick = None
     else:
-        x_min, x_max = 0.5, 5.5
-        x_dtick = 0.5 if n > 1 else 1.0
+        x_min, x_max = cfg["fixed_x_range"]
+        x_dtick = cfg["fixed_x_dtick"] if n > 1 else 1.0
 
-    # 表示範囲内のデータのみ抽出（描画パフォーマンス最適化）
+    # 表示範囲内のデータのみ抽出
     mask = (x_bars >= x_min - step_w) & (x_bars <= x_max + step_w)
     vis_x = x_bars[mask]
     vis_p = probs[mask]
 
-    bar_width = 0.55 if n == 1 else step_w * 0.86
+    if n == 1:
+        bar_width = 0.38 if len(vals) == 2 else 0.55
+    else:
+        bar_width = step_w * 0.86
 
     fig = go.Figure()
 
@@ -352,16 +439,18 @@ def create_sample_mean_dist_figure(n: int) -> go.Figure:
 
 
 # ============================================================================
-# 5. ヘッダー & トップコントロールバー
+# 6. ヘッダー & トップコントロールバー
 # ============================================================================
+current_cfg = DIST_MODES[st.session_state.dist_mode]
+
 st.markdown(
-    """
+    f"""
     <div class="sim-header">
         <div class="sim-title">
-            標本平均の確率分布シミュレーター（U字型母集団）
+            標本平均の確率分布シミュレーター ― {current_cfg["title"]}
         </div>
         <p class="sim-subtitle">
-            母集団がU字型分布であっても、標本サイズ n を大きくすると標本平均の確率分布は正規分布へ収束します（中心極限定理）。
+            {current_cfg["subtitle"]}
         </p>
     </div>
     """,
@@ -401,25 +490,23 @@ with ctrl_cols[4]:
 
 
 # ============================================================================
-# 6. メイン2カラムレイアウト（左: 母集団の確率分布 / 右: 標本平均の確率分布）
+# 7. メイン2カラムレイアウト（左: 母集団の確率分布 / 右: 標本平均の確率分布）
 # ============================================================================
 col_left, col_right = st.columns([4.2, 6.8], gap="large")
 
 # ---------------- 左カラム: 標本サイズ n & 母集団の確率分布 ----------------
 with col_left:
     with st.container(border=True):
-        # 1. 標本サイズ n バナー（中央揃え）
         st.markdown(
             render_n_banner_html(st.session_state.n),
             unsafe_allow_html=True,
         )
 
-        # 2. 母集団の確率分布（1〜5のU字型分布）
         st.markdown(
-            '<div class="section-title">母集団の確率分布（U字型分布）</div>',
+            f'<div class="section-title">{current_cfg["pop_title"]}</div>',
             unsafe_allow_html=True,
         )
-        pop_fig = create_population_figure()
+        pop_fig = create_population_figure(st.session_state.dist_mode)
         st.plotly_chart(pop_fig, use_container_width=True, config={"displayModeBar": False})
 
 
@@ -427,7 +514,7 @@ with col_left:
 with col_right:
     with st.container(border=True):
         X_MODE_LABELS = {
-            "fixed": "横軸 1〜5 固定",
+            "fixed": current_cfg["fixed_label"],
             "zoom": "分布周辺を拡大",
         }
 
@@ -451,12 +538,15 @@ with col_right:
                 value=st.session_state.show_normal_curve,
             )
 
-        mean_dist_fig = create_sample_mean_dist_figure(st.session_state.n)
+        mean_dist_fig = create_sample_mean_dist_figure(
+            st.session_state.dist_mode,
+            st.session_state.n,
+        )
         st.plotly_chart(mean_dist_fig, use_container_width=True, config={"displayModeBar": False})
 
 
 # ============================================================================
-# 7. 連続実行モードの自動更新ループ
+# 8. 連続実行モードの自動更新ループ
 # ============================================================================
 if st.session_state.is_running:
     time.sleep(SLEEP_INTERVAL)
