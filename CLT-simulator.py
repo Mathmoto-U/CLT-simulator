@@ -1,5 +1,5 @@
 """
-標本サイズ n に対する標本平均の確率分布シミュレーター
+標本の大きさ n に対する標本平均の確率分布シミュレーター（3モード切替版）
 ========================================================================================
 実行方法:
     pip install streamlit numpy plotly
@@ -75,7 +75,7 @@ CUSTOM_CSS = """
         margin: 3px 0 0 0;
     }
 
-    /* 左カラム：標本サイズ n バナー（中央揃え） */
+    /* 左カラム：標本の大きさ n バナー（中央揃え） */
     .result-banner {
         background: linear-gradient(90deg, #ecfdf5 0%, #f0fdfa 50%, #ecfdf5 100%);
         border: 1px solid #a7f3d0;
@@ -122,8 +122,9 @@ MODE_U_SHAPE = "U字型（1,2,3,4,5）"
 
 DIST_MODES: Dict[str, Dict] = {
     MODE_BERNOULLI: {
-        "title": "くじ引き",
-        "pop_title": "ベルヌーイ分布",
+        "title": "ベルヌーイ分布 B(1, 0.6)",
+        "subtitle": "0（確率0.4）と 1（確率0.6）をとる母集団から n 個抽出したときの標本平均の確率分布です。",
+        "pop_title": "母集団の確率分布 B(1, 0.6)",
         "values": np.array([0, 1], dtype=int),
         "probs": np.array([0.40, 0.60], dtype=float),
         "bar_colors": ["#94a3b8", "#10b981"],
@@ -132,11 +133,11 @@ DIST_MODES: Dict[str, Dict] = {
         "pop_y_dtick": 0.20,
         "fixed_x_range": [-0.25, 1.25],
         "fixed_x_dtick": 0.2,
-        "fixed_label": "横軸 0〜1 固定",
     },
     MODE_UNIFORM: {
-        "title": "さいころ",
-        "pop_title": "一様分布",
+        "title": "一様分布（さいころ）",
+        "subtitle": "1〜6の目が等確率（1/6ずつ）で出る母集団から n 個抽出したときの標本平均の確率分布です。",
+        "pop_title": "母集団の確率分布（一様分布）",
         "values": np.array([1, 2, 3, 4, 5, 6], dtype=int),
         "probs": np.array([1.0 / 6.0] * 6, dtype=float),
         "bar_colors": ["#60a5fa"] * 6,
@@ -145,11 +146,11 @@ DIST_MODES: Dict[str, Dict] = {
         "pop_y_dtick": 0.05,
         "fixed_x_range": [0.5, 6.5],
         "fixed_x_dtick": 0.5,
-        "fixed_label": "横軸 1〜6 固定",
     },
     MODE_U_SHAPE: {
-        "title": "こんな分布でも...",
-        "pop_title": "U字型分布",
+        "title": "U字型分布（1, 2, 3, 4, 5）",
+        "subtitle": "両外側（1と5）の確率が大きく中央（3）が小さいU字型母集団から n 個抽出したときの標本平均の確率分布です。",
+        "pop_title": "母集団の確率分布（U字型分布）",
         "values": np.array([1, 2, 3, 4, 5], dtype=int),
         "probs": np.array([0.31, 0.16, 0.06, 0.16, 0.31], dtype=float),
         "bar_colors": ["#6366f1", "#94a3b8", "#cbd5e1", "#94a3b8", "#10b981"],
@@ -158,7 +159,6 @@ DIST_MODES: Dict[str, Dict] = {
         "pop_y_dtick": 0.10,
         "fixed_x_range": [0.5, 5.5],
         "fixed_x_dtick": 0.5,
-        "fixed_label": "横軸 1〜5 固定",
     },
 }
 
@@ -176,8 +176,6 @@ def init_session_state() -> None:
         st.session_state.is_running = False
     if "show_normal_curve" not in st.session_state:
         st.session_state.show_normal_curve = True
-    if "x_axis_mode" not in st.session_state:
-        st.session_state.x_axis_mode = "fixed"
 
 
 init_session_state()
@@ -198,8 +196,9 @@ def get_population_stats(mode_key: str) -> Tuple[float, float, float]:
 # 3. サイドバー（3モード切替）
 # ============================================================================
 with st.sidebar:
+    st.markdown("### 📊 母集団分布の選択")
     selected_mode = st.radio(
-        "母集団分布",
+        "モードを選択",
         options=[MODE_BERNOULLI, MODE_UNIFORM, MODE_U_SHAPE],
         index=[MODE_BERNOULLI, MODE_UNIFORM, MODE_U_SHAPE].index(st.session_state.dist_mode),
         label_visibility="collapsed",
@@ -212,6 +211,12 @@ with st.sidebar:
         st.rerun()
 
     pop_mean, pop_var, pop_std = get_population_stats(st.session_state.dist_mode)
+    st.divider()
+    st.markdown(
+        f"**母平均 $\\mu$** : `{pop_mean:.2f}`  \n"
+        f"**母分散 $\\sigma^2$** : `{pop_var:.3f}`  \n"
+        f"**母標準偏差 $\\sigma$** : `{pop_std:.3f}`"
+    )
 
 
 # ============================================================================
@@ -221,7 +226,7 @@ with st.sidebar:
 def compute_sample_mean_distribution(mode_key: str, n: int) -> Tuple[np.ndarray, np.ndarray]:
     """
     繰り返し二乗法による畳み込み（Convolution）を用いて、
-    標本サイズ n における標本平均 X_bar の厳密な確率分布を高速に計算する。
+    標本の大きさ n における標本平均 X_bar の厳密な確率分布を高速に計算する。
     """
     cfg = DIST_MODES[mode_key]
     vals = cfg["values"]
@@ -251,11 +256,11 @@ def compute_sample_mean_distribution(mode_key: str, n: int) -> Tuple[np.ndarray,
 # 5. HTML & チャート描画ヘルパー
 # ============================================================================
 def render_n_banner_html(n: int) -> str:
-    """左カラム上部の「標本サイズ n」バナーHTML（中央揃え）"""
+    """左カラム上部の「標本の大きさ / n=(標本サイズ)」バナーHTML（中央揃え）"""
     return f"""
     <div class="result-banner">
         <div class="result-label">標本の大きさ</div>
-        <div class="result-val-emerald">{n:,}</div>
+        <div class="result-val-emerald">n={n:,}</div>
     </div>
     """
 
@@ -318,11 +323,9 @@ def create_population_figure(mode_key: str) -> go.Figure:
 
 
 def create_sample_mean_dist_figure(mode_key: str, n: int) -> go.Figure:
-    """右カラム：標本サイズ n に対する標本平均 X_bar の確率分布グラフ"""
+    """右カラム：標本の大きさ n に対する標本平均 X_bar の確率分布グラフ"""
     cfg = DIST_MODES[mode_key]
     vals = cfg["values"]
-    v_min, v_max = float(vals[0]), float(vals[-1])
-    span = v_max - v_min
 
     x_bars, probs = compute_sample_mean_distribution(mode_key, n)
     mean, _, pop_std = get_population_stats(mode_key)
@@ -337,15 +340,9 @@ def create_sample_mean_dist_figure(mode_key: str, n: int) -> go.Figure:
     # n が変わっても山が潰れないよう、縦軸の上限を現在のピークに合わせてスケーリング
     y_max = max(max_prob, theo_peak) * 1.18
 
-    # 横軸の表示範囲（全体固定 または μ±4σ拡大）
-    if st.session_state.x_axis_mode == "zoom" and n >= 4:
-        half_span = max(4.0 * std_xbar, 0.02 * span)
-        x_min = max(v_min - 0.15 * span, mean - half_span)
-        x_max = min(v_max + 0.15 * span, mean + half_span)
-        x_dtick = None
-    else:
-        x_min, x_max = cfg["fixed_x_range"]
-        x_dtick = cfg["fixed_x_dtick"] if n > 1 else 1.0
+    # 横軸の表示範囲（各分布モードの固定範囲）
+    x_min, x_max = cfg["fixed_x_range"]
+    x_dtick = cfg["fixed_x_dtick"] if n > 1 else 1.0
 
     # 表示範囲内のデータのみ抽出
     mask = (x_bars >= x_min - step_w) & (x_bars <= x_max + step_w)
@@ -437,8 +434,11 @@ st.markdown(
     f"""
     <div class="sim-header">
         <div class="sim-title">
-            {current_cfg["title"]}
+            標本平均の確率分布シミュレーター ― {current_cfg["title"]}
         </div>
+        <p class="sim-subtitle">
+            {current_cfg["subtitle"]}
+        </p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -460,14 +460,14 @@ with ctrl_cols[1]:
             st.session_state.n += 1
 
 with ctrl_cols[2]:
-    if st.button("+5", use_container_width=True):
-        st.session_state.is_running = False
-        st.session_state.n += 5
-
-with ctrl_cols[3]:
     if st.button("+10", use_container_width=True):
         st.session_state.is_running = False
         st.session_state.n += 10
+
+with ctrl_cols[3]:
+    if st.button("+100", use_container_width=True):
+        st.session_state.is_running = False
+        st.session_state.n += 100
 
 with ctrl_cols[4]:
     if st.button("リセット", use_container_width=True):
@@ -481,7 +481,7 @@ with ctrl_cols[4]:
 # ============================================================================
 col_left, col_right = st.columns([4.2, 6.8], gap="large")
 
-# ---------------- 左カラム: 標本サイズ n & 母集団の確率分布 ----------------
+# ---------------- 左カラム: 標本の大きさ n & 母集団の確率分布 ----------------
 with col_left:
     with st.container(border=True):
         st.markdown(
@@ -499,26 +499,11 @@ with col_left:
 
 # ---------------- 右カラム: 標本平均の確率分布 ----------------
 with col_right:
-
-        top_opt_cols = st.columns([6, 4])
-        with top_opt_cols[0]:
-            selected_x_mode = st.radio(
-                "表示範囲の選択",
-                options=["fixed", "zoom"],
-                format_func=lambda x: X_MODE_LABELS[x],
-                index=["fixed", "zoom"].index(st.session_state.x_axis_mode),
-                horizontal=True,
-            )
-            if selected_x_mode != st.session_state.x_axis_mode:
-                st.session_state.x_axis_mode = selected_x_mode
-                st.rerun()
-
-        with top_opt_cols[1]:
-            st.write("")
-            st.session_state.show_normal_curve = st.toggle(
-                "正規分布の理論曲線を表示",
-                value=st.session_state.show_normal_curve,
-            )
+    with st.container(border=True):
+        st.session_state.show_normal_curve = st.toggle(
+            "正規分布の理論曲線を表示",
+            value=st.session_state.show_normal_curve,
+        )
 
         mean_dist_fig = create_sample_mean_dist_figure(
             st.session_state.dist_mode,
