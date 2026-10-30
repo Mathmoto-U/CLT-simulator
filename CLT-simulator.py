@@ -439,9 +439,6 @@ st.markdown(
         <div class="sim-title">
             標本平均の確率分布シミュレーター ― {current_cfg["title"]}
         </div>
-        <p class="sim-subtitle">
-            {current_cfg["subtitle"]}
-        </p>
     </div>
     """,
     unsafe_allow_html=True,
