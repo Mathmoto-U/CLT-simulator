@@ -1,5 +1,5 @@
 """
-標本サイズ n に対する標本平均の確率分布シミュレーター（3モード切替版）
+標本サイズ n に対する標本平均の確率分布シミュレーター
 ========================================================================================
 実行方法:
     pip install streamlit numpy plotly
@@ -122,9 +122,8 @@ MODE_U_SHAPE = "U字型（1,2,3,4,5）"
 
 DIST_MODES: Dict[str, Dict] = {
     MODE_BERNOULLI: {
-        "title": "ベルヌーイ分布 B(1, 0.6)",
-        "subtitle": "0（確率0.4）と 1（確率0.6）をとる母集団から n 個抽出したときの標本平均の確率分布です。",
-        "pop_title": "母集団の確率分布 B(1, 0.6)",
+        "title": "くじ引き",
+        "pop_title": "ベルヌーイ分布",
         "values": np.array([0, 1], dtype=int),
         "probs": np.array([0.40, 0.60], dtype=float),
         "bar_colors": ["#94a3b8", "#10b981"],
@@ -136,9 +135,8 @@ DIST_MODES: Dict[str, Dict] = {
         "fixed_label": "横軸 0〜1 固定",
     },
     MODE_UNIFORM: {
-        "title": "一様分布（さいころ）",
-        "subtitle": "1〜6の目が等確率（1/6ずつ）で出る母集団から n 個抽出したときの標本平均の確率分布です。",
-        "pop_title": "母集団の確率分布（一様分布）",
+        "title": "さいころ",
+        "pop_title": "一様分布",
         "values": np.array([1, 2, 3, 4, 5, 6], dtype=int),
         "probs": np.array([1.0 / 6.0] * 6, dtype=float),
         "bar_colors": ["#60a5fa"] * 6,
@@ -150,9 +148,8 @@ DIST_MODES: Dict[str, Dict] = {
         "fixed_label": "横軸 1〜6 固定",
     },
     MODE_U_SHAPE: {
-        "title": "U字型分布（1, 2, 3, 4, 5）",
-        "subtitle": "両外側（1と5）の確率が大きく中央（3）が小さいU字型母集団から n 個抽出したときの標本平均の確率分布です。",
-        "pop_title": "母集団の確率分布（U字型分布）",
+        "title": "こんな分布でも...",
+        "pop_title": "U字型分布",
         "values": np.array([1, 2, 3, 4, 5], dtype=int),
         "probs": np.array([0.31, 0.16, 0.06, 0.16, 0.31], dtype=float),
         "bar_colors": ["#6366f1", "#94a3b8", "#cbd5e1", "#94a3b8", "#10b981"],
@@ -201,9 +198,8 @@ def get_population_stats(mode_key: str) -> Tuple[float, float, float]:
 # 3. サイドバー（3モード切替）
 # ============================================================================
 with st.sidebar:
-    st.markdown("### 📊 母集団分布の選択")
     selected_mode = st.radio(
-        "モードを選択",
+        "母集団分布",
         options=[MODE_BERNOULLI, MODE_UNIFORM, MODE_U_SHAPE],
         index=[MODE_BERNOULLI, MODE_UNIFORM, MODE_U_SHAPE].index(st.session_state.dist_mode),
         label_visibility="collapsed",
@@ -216,12 +212,6 @@ with st.sidebar:
         st.rerun()
 
     pop_mean, pop_var, pop_std = get_population_stats(st.session_state.dist_mode)
-    st.divider()
-    st.markdown(
-        f"**母平均 $\\mu$** : `{pop_mean:.2f}`  \n"
-        f"**母分散 $\\sigma^2$** : `{pop_var:.3f}`  \n"
-        f"**母標準偏差 $\\sigma$** : `{pop_std:.3f}`"
-    )
 
 
 # ============================================================================
