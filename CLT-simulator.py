@@ -254,7 +254,7 @@ def render_n_banner_html(n: int) -> str:
     """左カラム上部の「標本サイズ n」バナーHTML（中央揃え）"""
     return f"""
     <div class="result-banner">
-        <div class="result-label">標本サイズ n</div>
+        <div class="result-label">標本の大きさ</div>
         <div class="result-val-emerald">{n:,}</div>
     </div>
     """
@@ -437,7 +437,7 @@ st.markdown(
     f"""
     <div class="sim-header">
         <div class="sim-title">
-            標本平均の確率分布シミュレーター ― {current_cfg["title"]}
+            {current_cfg["title"]}
         </div>
     </div>
     """,
@@ -460,14 +460,14 @@ with ctrl_cols[1]:
             st.session_state.n += 1
 
 with ctrl_cols[2]:
+    if st.button("+5", use_container_width=True):
+        st.session_state.is_running = False
+        st.session_state.n += 5
+
+with ctrl_cols[3]:
     if st.button("+10", use_container_width=True):
         st.session_state.is_running = False
         st.session_state.n += 10
-
-with ctrl_cols[3]:
-    if st.button("+100", use_container_width=True):
-        st.session_state.is_running = False
-        st.session_state.n += 100
 
 with ctrl_cols[4]:
     if st.button("リセット", use_container_width=True):
@@ -499,11 +499,6 @@ with col_left:
 
 # ---------------- 右カラム: 標本平均の確率分布 ----------------
 with col_right:
-    with st.container(border=True):
-        X_MODE_LABELS = {
-            "fixed": current_cfg["fixed_label"],
-            "zoom": "分布周辺を拡大",
-        }
 
         top_opt_cols = st.columns([6, 4])
         with top_opt_cols[0]:
